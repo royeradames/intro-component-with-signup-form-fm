@@ -26,6 +26,9 @@ const emptyValues: SignupValues = { firstName: "", lastName: "", email: "", pass
 /** Simulated round trip so the busy state is visible; nothing leaves the browser. */
 const DEMO_DELAY_MS = 900;
 
+/** Never runs: onSubmit always prevents the default submit once the page has hydrated. */
+function noScriptSafeAction() {}
+
 function errorText(errors: unknown[]): string | undefined {
   const first = errors.find(Boolean);
   if (!first) return undefined;
@@ -59,6 +62,8 @@ export function SignupForm() {
   return (
     <div className="signup-card">
       <form
+        // A function action makes React render an inert action, so a no-JavaScript submit sends nothing; onSubmit below handles every hydrated submit.
+        action={noScriptSafeAction}
         noValidate
         aria-label="Claim your free trial"
         onSubmit={event => {

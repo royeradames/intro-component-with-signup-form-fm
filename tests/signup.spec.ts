@@ -143,3 +143,24 @@ test("fits narrow and enlarged layouts with the family text and target floors", 
   await page.addStyleTag({ content: "html { font-size: 200%; }" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test("without JavaScript a submit sends nothing and never puts the typed details in the URL", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  const writes: string[] = [];
+  page.on("request", request => { if (request.method() !== "GET") writes.push(request.url()); });
+  try {
+    await page.goto("http://127.0.0.1:4561/");
+    await expect(page.getByText("Demo only: nothing is sent.")).toBeVisible();
+    await page.getByLabel("First Name").fill("Jonathan");
+    await page.getByLabel("Email Address").fill("jonathan@example.com");
+    await page.getByLabel("Password").fill("demo-password");
+    await page.getByRole("button", { name: "Claim your free trial" }).click();
+    await page.waitForLoadState();
+    expect(new URL(page.url()).search).toBe("");
+    expect(page.url()).not.toContain("demo-password");
+    expect(writes).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
