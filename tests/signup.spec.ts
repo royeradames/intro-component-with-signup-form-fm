@@ -1,0 +1,166 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const fieldLabels = ["First Name", "Last Name", "Email Address", "Password"];
+
+async function fillValid(page: Page) {
+  await page.getByLabel("First Name").fill("Jonathan");
+  await page.getByLabel("Last Name").fill("Doe");
+  await page.getByLabel("Email Address").fill("jonathan@example.com");
+  await page.getByLabel("Password").fill("demo-password");
+}
+
+test("renders the supplied copy, landmarks and an honest demo notice", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).toHaveTitle("Intro component with sign up form | Royer Adames");
+  await expect(page.getByRole("main")).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Learn to code by watching others");
+  await expect(page.getByText("See how experienced developers solve problems in real-time.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Try it free 7 days then $20/mo. thereafter")).toBeVisible();
+  const form = page.getByRole("form", { name: "Claim your free trial" });
+  for (const label of fieldLabels) await expect(form.getByLabel(label)).toBeVisible();
+  await expect(form.getByRole("button", { name: "Claim your free trial" })).toBeEnabled();
+  await expect(page.getByText("By clicking the button, you are agreeing to our Terms and Services")).toBeVisible();
+  await expect(page.getByText("Demo only: nothing is sent.")).toBeVisible();
+});
+
+test("declares one site name in the footer, og:site_name and WebSite JSON-LD", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".site-name")).toHaveText("Intro component with sign up form");
+  await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute("content", "Intro component with sign up form");
+  const jsonLd = JSON.parse(await page.locator('script[type="application/ld+json"]').textContent() ?? "{}");
+  expect(jsonLd).toEqual({ "@context": "https://schema.org", "@type": "WebSite", name: "Intro component with sign up form", url: "https://intro-component-with-signup-form-fm.royeradames.com" });
+});
+
+test("an empty submit shows every challenge message and focuses the first invalid field", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Claim your free trial" }).click();
+  for (const label of fieldLabels) {
+    const input = page.getByLabel(label);
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(input).toHaveAccessibleDescription(`${label} cannot be empty`);
+  }
+  await expect(page.getByLabel("First Name")).toBeFocused();
+  await expect(page.getByLabel("First Name")).toHaveCSS("background-image", /icon-error\.svg/);
+});
+
+test("focus moves to the first invalid field in form order, and errors clear as they are fixed", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("First Name").fill("Jonathan");
+  await page.getByLabel("Last Name").fill("Doe");
+  await page.getByLabel("Email Address").fill("email@example/com");
+  await page.getByRole("button", { name: "Claim your free trial" }).click();
+  const email = page.getByLabel("Email Address");
+  await expect(email).toBeFocused();
+  await expect(email).toHaveAccessibleDescription("Looks like this is not an email");
+  await expect(page.getByLabel("Password")).toHaveAccessibleDescription("Password cannot be empty");
+  await expect(page.getByLabel("First Name")).not.toHaveAttribute("aria-invalid", "true");
+  await email.fill("email@example.com");
+  await expect(email).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("Looks like this is not an email")).toHaveCount(0);
+  await page.getByRole("button", { name: "Claim your free trial" }).click();
+  await expect(page.getByLabel("Password")).toBeFocused();
+});
+
+test("keyboard submit is busy (not disabled), blocks re-entry and confirms nothing was sent", async ({ page }) => {
+  const writes: string[] = [];
+  page.on("request", request => { if (request.method() !== "GET") writes.push(request.url()); });
+  await page.goto("/");
+  await fillValid(page);
+  const button = page.getByRole("button", { name: "Claim your free trial" });
+  await page.getByLabel("Password").press("Enter");
+  await expect(button).toHaveAttribute("aria-busy", "true");
+  await expect(button).toBeEnabled();
+  await expect(page.getByRole("status")).toHaveText("Checking your details…");
+  await button.focus();
+  await expect(button).toBeFocused();
+  await page.keyboard.press("Enter");
+  const status = page.getByRole("status");
+  await expect(status).toHaveText("Thanks, Jonathan! Your trial claim worked in this demo, but nothing was sent.");
+  await expect(status).toBeFocused();
+  await expect(button).not.toHaveAttribute("aria-busy", "true");
+  await expect(page.getByLabel("First Name")).toHaveValue("");
+  expect(writes).toEqual([]);
+});
+
+test("hover and focus states follow the active-state design", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Claim your free trial" });
+  await expect(button).toHaveCSS("background-color", "rgb(56, 204, 139)");
+  await button.hover();
+  await expect(button).toHaveCSS("background-color", "rgb(119, 226, 179)");
+  const first = page.getByLabel("First Name");
+  await first.focus();
+  await expect(first).toHaveCSS("border-top-color", "rgb(94, 84, 164)");
+});
+
+test("follows the Figma arrangement at mobile, tablet and desktop", async ({ page }) => {
+  const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+  await page.setViewportSize({ width: 375, height: 1000 });
+  await page.goto("/");
+  let heading = await box("h1");
+  let card = await box(".signup-card");
+  expect(card.y).toBeGreaterThan(heading.y + heading.height);
+  expect(Math.round(card.width)).toBe(327);
+  await expect(page.locator("h1")).toHaveCSS("text-align", "center");
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  card = await box(".signup-card");
+  expect(Math.round(card.width)).toBe(540);
+  expect(Math.abs(card.x + card.width / 2 - 384)).toBeLessThan(2);
+  expect(Math.round((await box("#firstName")).width)).toBe(460);
+  expect(Math.round((await box("#firstName")).height)).toBe(56);
+
+  await page.setViewportSize({ width: 1440, height: 800 });
+  heading = await box("h1");
+  card = await box(".signup-card");
+  expect(card.x).toBeGreaterThan(heading.x + heading.width);
+  expect(Math.round(card.width)).toBe(540);
+  expect(Math.round(heading.width)).toBe(525);
+  expect(Math.abs(card.x - 736)).toBeLessThanOrEqual(1);
+  expect(Math.round((await box(".offer")).height)).toBe(60);
+  expect(Math.round((await box(".claim")).height)).toBe(56);
+  await expect(page.locator("h1")).toHaveCSS("font-size", "50px");
+  await expect(page.locator("h1")).toHaveCSS("text-align", "left");
+});
+
+test("fits narrow and enlarged layouts with the family text and target floors", async ({ page }) => {
+  for (const width of [320, 375, 400, 640, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Claim your free trial" }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const smallText = await page.locator("h1, p, input, button, footer, footer a").evaluateAll(elements =>
+      elements.filter(element => element.getClientRects().length > 0 && parseFloat(getComputedStyle(element).fontSize) < 16).map(element => element.textContent));
+    expect(smallText).toEqual([]);
+    for (const control of await page.locator("a, button, input").all()) {
+      const controlBox = await control.boundingBox();
+      expect(controlBox?.height).toBeGreaterThanOrEqual(44);
+    }
+  }
+  await page.setViewportSize({ width: 640, height: 900 });
+  await page.addStyleTag({ content: "html { font-size: 200%; }" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("without JavaScript a submit sends nothing and never puts the typed details in the URL", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  const writes: string[] = [];
+  page.on("request", request => { if (request.method() !== "GET") writes.push(request.url()); });
+  try {
+    await page.goto("http://127.0.0.1:4561/");
+    await expect(page.getByText("Demo only: nothing is sent.")).toBeVisible();
+    await page.getByLabel("First Name").fill("Jonathan");
+    await page.getByLabel("Email Address").fill("jonathan@example.com");
+    await page.getByLabel("Password").fill("demo-password");
+    await page.getByRole("button", { name: "Claim your free trial" }).click();
+    await page.waitForLoadState();
+    expect(new URL(page.url()).search).toBe("");
+    expect(page.url()).not.toContain("demo-password");
+    expect(writes).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
