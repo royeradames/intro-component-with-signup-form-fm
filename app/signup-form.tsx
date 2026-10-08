@@ -12,7 +12,7 @@ const signupSchema = z
     firstName: z.string().trim().min(1, "First Name cannot be empty"),
     lastName: z.string().trim().min(1, "Last Name cannot be empty"),
     email: z.string().trim().min(1, "Email Address cannot be empty").pipe(z.email("Looks like this is not an email")),
-    password: z.string().min(1, { error: "Password cannot be empty", abort: true }).min(PASSWORD_MIN, `Password needs at least ${PASSWORD_MIN} characters`),
+    password: z.string().min(1, { error: "Password cannot be empty", abort: true }).min(PASSWORD_MIN, "Password is too short"),
     confirmPassword: z.string().min(1, "Confirm Password cannot be empty"),
   })
   .refine(value => value.password === value.confirmPassword, {

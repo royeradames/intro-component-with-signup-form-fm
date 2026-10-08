@@ -195,7 +195,7 @@ test("the new password shows its requirement up front, checks it live, and must 
   await confirm.fill("another-pass");
   await page.getByRole("button", { name: "Claim your free trial" }).click();
   await expect(password).toBeFocused();
-  await expect(password).toHaveAccessibleDescription(`Password needs at least 15 characters ${passwordRule}`);
+  await expect(password).toHaveAccessibleDescription(`Password is too short ${passwordRule}`);
   await expect(confirm).toHaveAccessibleDescription("Passwords do not match");
   await password.fill(validPassword);
   await page.getByRole("button", { name: "Claim your free trial" }).click();
