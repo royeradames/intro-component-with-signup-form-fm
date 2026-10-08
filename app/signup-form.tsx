@@ -4,12 +4,23 @@ import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useRef, useState } from "react";
 import { z } from "zod";
 
-const signupSchema = z.object({
-  firstName: z.string().trim().min(1, "First Name cannot be empty"),
-  lastName: z.string().trim().min(1, "Last Name cannot be empty"),
-  email: z.string().trim().min(1, "Email Address cannot be empty").pipe(z.email("Looks like this is not an email")),
-  password: z.string().min(1, "Password cannot be empty"),
-});
+/** NIST SP 800-63B-4 asks for at least 15 characters when a password is the only factor. */
+const PASSWORD_MIN = 15;
+
+const signupSchema = z
+  .object({
+    firstName: z.string().trim().min(1, "First Name cannot be empty"),
+    lastName: z.string().trim().min(1, "Last Name cannot be empty"),
+    email: z.string().trim().min(1, "Email Address cannot be empty").pipe(z.email("Looks like this is not an email")),
+    password: z.string().min(1, { error: "Password cannot be empty", abort: true }).min(PASSWORD_MIN, "Password is too short"),
+    confirmPassword: z.string().min(1, "Confirm Password cannot be empty"),
+  })
+  .refine(value => value.password === value.confirmPassword, {
+    error: "Passwords do not match",
+    path: ["confirmPassword"],
+    // Report a mismatch even while another field is still invalid, unless the confirmation is simply empty.
+    when: payload => !payload.issues.some(issue => issue.path?.[0] === "confirmPassword"),
+  });
 
 type SignupValues = z.input<typeof signupSchema>;
 type FieldName = keyof SignupValues;
@@ -19,9 +30,11 @@ const fields: ReadonlyArray<{ name: FieldName; label: string; type: string; auto
   { name: "lastName", label: "Last Name", type: "text", autoComplete: "family-name" },
   { name: "email", label: "Email Address", type: "email", autoComplete: "email" },
   { name: "password", label: "Password", type: "password", autoComplete: "new-password" },
+  { name: "confirmPassword", label: "Confirm Password", type: "password", autoComplete: "new-password" },
 ];
 
-const emptyValues: SignupValues = { firstName: "", lastName: "", email: "", password: "" };
+const emptyValues: SignupValues = { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" };
+const PASSWORD_RULE_ID = "password-rule";
 
 /** Simulated round trip so the busy state is visible; nothing leaves the browser. */
 const DEMO_DELAY_MS = 900;
@@ -79,6 +92,9 @@ export function SignupForm() {
               {field => {
                 const message = errorText(field.state.meta.errors);
                 const errorId = `${name}-error`;
+                const isPassword = name === "password";
+                const ruleMet = isPassword && field.state.value.length >= PASSWORD_MIN;
+                const describedBy = [message ? errorId : null, isPassword ? PASSWORD_RULE_ID : null].filter(Boolean).join(" ") || undefined;
                 return (
                   <div className="field">
                     <label className="sr-only" htmlFor={name}>{label}</label>
@@ -92,9 +108,16 @@ export function SignupForm() {
                       onBlur={field.handleBlur}
                       onChange={event => field.handleChange(event.target.value)}
                       aria-invalid={message ? true : undefined}
-                      aria-describedby={message ? errorId : undefined}
+                      aria-describedby={describedBy}
                     />
                     {message ? <p id={errorId} className="field-error">{message}</p> : null}
+                    {isPassword ? (
+                      // Shown before typing and checked live; not a live region, so it is read with the field instead of on every keystroke.
+                      <p id={PASSWORD_RULE_ID} className="field-hint" data-met={ruleMet}>
+                        <span className="field-hint-icon" aria-hidden="true" />
+                        <span>At least {PASSWORD_MIN} characters{ruleMet ? <span className="sr-only"> (done)</span> : null}</span>
+                      </p>
+                    ) : null}
                   </div>
                 );
               }}

@@ -17,6 +17,7 @@ Original challenge files are preserved under `reference/`; supplied images moved
 ## Implementation choices
 
 - Validation runs on submit, then again on every change once a submit has been attempted, so fixed fields clear right away. Messages are the challenge's own ("First Name cannot be empty", "Looks like this is not an email"). On an invalid submit, focus moves to the first invalid field in form order; each input points at its message with `aria-describedby`.
+- Creating a password asks for it twice ("Confirm Password", added beyond the design at Royer's request) and shows its one requirement, "At least 15 characters" (NIST SP 800-63B-4 for password-only sign-up), before anything is typed. The requirement is linked to the field, ticks over to a check with "(done)" once met, and is not a live region, so it is read with the field rather than on every keystroke. A mismatch says "Passwords do not match" on the confirmation field.
 - Each input has a real (visually hidden) label as well as the design's placeholder. Placeholders stay visible in the error state so the field name never disappears.
 - The submit button stays enabled and focusable while the simulated request runs. It shows a spinner and `aria-busy`, and a second submit is ignored.
 - The design sets the banner and inputs at 15px and the terms and errors at 11px. The family 16px floor raises them all to 16px.

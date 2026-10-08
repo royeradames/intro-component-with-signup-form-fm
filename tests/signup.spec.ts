@@ -1,12 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const fieldLabels = ["First Name", "Last Name", "Email Address", "Password"];
+const fieldLabels = ["First Name", "Last Name", "Email Address", "Password", "Confirm Password"];
+const passwordRule = "At least 15 characters";
+const validPassword = "correct-horse-battery";
 
 async function fillValid(page: Page) {
   await page.getByLabel("First Name").fill("Jonathan");
   await page.getByLabel("Last Name").fill("Doe");
   await page.getByLabel("Email Address").fill("jonathan@example.com");
-  await page.getByLabel("Password").fill("demo-password");
+  await page.getByLabel("Password", { exact: true }).fill(validPassword);
+  await page.getByLabel("Confirm Password").fill(validPassword);
 }
 
 test("renders the supplied copy, landmarks and an honest demo notice", async ({ page }) => {
@@ -18,7 +21,7 @@ test("renders the supplied copy, landmarks and an honest demo notice", async ({ 
   await expect(page.getByText("See how experienced developers solve problems in real-time.", { exact: false })).toBeVisible();
   await expect(page.getByText("Try it free 7 days then $20/mo. thereafter")).toBeVisible();
   const form = page.getByRole("form", { name: "Claim your free trial" });
-  for (const label of fieldLabels) await expect(form.getByLabel(label)).toBeVisible();
+  for (const label of fieldLabels) await expect(form.getByLabel(label, { exact: true })).toBeVisible();
   await expect(form.getByRole("button", { name: "Claim your free trial" })).toBeEnabled();
   await expect(page.getByText("By clicking the button, you are agreeing to our Terms and Services")).toBeVisible();
   await expect(page.getByText("Demo only: nothing is sent.")).toBeVisible();
@@ -36,9 +39,9 @@ test("an empty submit shows every challenge message and focuses the first invali
   await page.goto("/");
   await page.getByRole("button", { name: "Claim your free trial" }).click();
   for (const label of fieldLabels) {
-    const input = page.getByLabel(label);
+    const input = page.getByLabel(label, { exact: true });
     await expect(input).toHaveAttribute("aria-invalid", "true");
-    await expect(input).toHaveAccessibleDescription(`${label} cannot be empty`);
+    await expect(input).toHaveAccessibleDescription(label === "Password" ? `Password cannot be empty ${passwordRule}` : `${label} cannot be empty`);
   }
   await expect(page.getByLabel("First Name")).toBeFocused();
   await expect(page.getByLabel("First Name")).toHaveCSS("background-image", /icon-error\.svg/);
@@ -53,13 +56,13 @@ test("focus moves to the first invalid field in form order, and errors clear as 
   const email = page.getByLabel("Email Address");
   await expect(email).toBeFocused();
   await expect(email).toHaveAccessibleDescription("Looks like this is not an email");
-  await expect(page.getByLabel("Password")).toHaveAccessibleDescription("Password cannot be empty");
+  await expect(page.getByLabel("Password", { exact: true })).toHaveAccessibleDescription(`Password cannot be empty ${passwordRule}`);
   await expect(page.getByLabel("First Name")).not.toHaveAttribute("aria-invalid", "true");
   await email.fill("email@example.com");
   await expect(email).not.toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText("Looks like this is not an email")).toHaveCount(0);
   await page.getByRole("button", { name: "Claim your free trial" }).click();
-  await expect(page.getByLabel("Password")).toBeFocused();
+  await expect(page.getByLabel("Password", { exact: true })).toBeFocused();
 });
 
 test("keyboard submit is busy (not disabled), blocks re-entry and confirms nothing was sent", async ({ page }) => {
@@ -68,7 +71,7 @@ test("keyboard submit is busy (not disabled), blocks re-entry and confirms nothi
   await page.goto("/");
   await fillValid(page);
   const button = page.getByRole("button", { name: "Claim your free trial" });
-  await page.getByLabel("Password").press("Enter");
+  await page.getByLabel("Confirm Password").press("Enter");
   await expect(button).toHaveAttribute("aria-busy", "true");
   await expect(button).toBeEnabled();
   await expect(page.getByRole("status")).toHaveText("Checking your details…");
@@ -154,13 +157,52 @@ test("without JavaScript a submit sends nothing and never puts the typed details
     await expect(page.getByText("Demo only: nothing is sent.")).toBeVisible();
     await page.getByLabel("First Name").fill("Jonathan");
     await page.getByLabel("Email Address").fill("jonathan@example.com");
-    await page.getByLabel("Password").fill("demo-password");
+    await page.getByLabel("Password", { exact: true }).fill(validPassword);
+    await page.getByLabel("Confirm Password").fill(validPassword);
     await page.getByRole("button", { name: "Claim your free trial" }).click();
     await page.waitForLoadState();
     expect(new URL(page.url()).search).toBe("");
-    expect(page.url()).not.toContain("demo-password");
+    expect(page.url()).not.toContain(validPassword);
     expect(writes).toEqual([]);
   } finally {
     await context.close();
   }
+});
+
+/* QA sweep October 8 (PW1, PW2): creating a password must ask for it twice and show its requirement before any submit. */
+test("the new password shows its requirement up front, checks it live, and must be confirmed", async ({ page }) => {
+  await page.goto("/");
+  const password = page.getByLabel("Password", { exact: true });
+  const confirm = page.getByLabel("Confirm Password");
+  await expect(password).toHaveAttribute("autocomplete", "new-password");
+  await expect(confirm).toHaveAttribute("autocomplete", "new-password");
+  await expect(confirm).toHaveAttribute("type", "password");
+  const rule = page.locator("#password-rule");
+  await expect(rule).toBeVisible();
+  await expect(rule).toContainText(passwordRule);
+  await expect(password).toHaveAccessibleDescription(passwordRule);
+  await expect(rule).toHaveAttribute("data-met", "false");
+  await password.fill("short-pass");
+  await expect(rule).toHaveAttribute("data-met", "false");
+  await password.fill(validPassword);
+  await expect(rule).toHaveAttribute("data-met", "true");
+  await expect(rule).toContainText(`${passwordRule} (done)`);
+
+  await page.getByLabel("First Name").fill("Jonathan");
+  await page.getByLabel("Last Name").fill("Doe");
+  await page.getByLabel("Email Address").fill("jonathan@example.com");
+  await password.fill("short-pass");
+  await confirm.fill("another-pass");
+  await page.getByRole("button", { name: "Claim your free trial" }).click();
+  await expect(password).toBeFocused();
+  await expect(password).toHaveAccessibleDescription(`Password is too short ${passwordRule}`);
+  await expect(confirm).toHaveAccessibleDescription("Passwords do not match");
+  await password.fill(validPassword);
+  await page.getByRole("button", { name: "Claim your free trial" }).click();
+  await expect(confirm).toBeFocused();
+  await expect(confirm).toHaveAttribute("aria-invalid", "true");
+  await confirm.fill(validPassword);
+  await expect(confirm).not.toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Claim your free trial" }).click();
+  await expect(page.getByRole("status")).toHaveText("Thanks, Jonathan! Your trial claim worked in this demo, but nothing was sent.");
 });
