@@ -147,13 +147,13 @@ test("fits narrow and enlarged layouts with the family text and target floors", 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test("without JavaScript a submit sends nothing and never puts the typed details in the URL", async ({ browser }) => {
+test("without JavaScript a submit sends nothing and never puts the typed details in the URL", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   const writes: string[] = [];
   page.on("request", request => { if (request.method() !== "GET") writes.push(request.url()); });
   try {
-    await page.goto("http://127.0.0.1:4561/");
+    await page.goto(`${baseURL}/`);
     await expect(page.getByText("Demo only: nothing is sent.")).toBeVisible();
     await page.getByLabel("First Name").fill("Jonathan");
     await page.getByLabel("Email Address").fill("jonathan@example.com");
@@ -205,4 +205,34 @@ test("the new password shows its requirement up front, checks it live, and must 
   await expect(confirm).not.toHaveAttribute("aria-invalid", "true");
   await page.getByRole("button", { name: "Claim your free trial" }).click();
   await expect(page.getByRole("status")).toHaveText("Thanks, Jonathan! Your trial claim worked in this demo, but nothing was sent.");
+});
+
+/* October 11 audit, principle 7 (BTN8): "Claim your free trial" wrapped onto two lines from 320 to 340 px. The card gives way, the words don't. */
+test("the claim button label stays on one line from 320 to 1920 px", async ({ page }) => {
+  await page.goto("/");
+  const button = page.getByRole("button", { name: "Claim your free trial" });
+  for (const width of [320, 325, 330, 335, 340, 350, 360, 375, 400, 768, 1024, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const lines = await button.evaluate(element => {
+      const tops = new Set<number>();
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.nodeValue?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects()) if (rect.width > 0.5) tops.add(Math.round(rect.top));
+      }
+      return tops.size;
+    });
+    expect(lines, `label lines at ${width}px`).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no page scroll at ${width}px`).toBe(true);
+  }
+});
+
+/* October 11 audit: the served form carried React's javascript: placeholder action, which the HTML validator rejects. */
+test("the served form has no javascript: action", async ({ request }) => {
+  const html = await (await request.get("/")).text();
+  const form = html.match(/<form\b[^>]*>/)?.[0] ?? "";
+  expect(form).not.toBe("");
+  expect(form).not.toMatch(/javascript:/i);
 });
