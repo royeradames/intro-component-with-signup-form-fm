@@ -112,6 +112,13 @@ footer { padding: 0 1.5rem 1.5rem; color: var(--footer-text); font-size: 1rem; f
 footer a { display: inline-block; padding-block: .75rem; font-weight: 600; }
 footer a:hover { text-decoration-line: underline; text-decoration-thickness: 2px; }
 
+/* Narrow phones (under 360px): the boxes give way so "Claim your free trial" keeps one line (principle 7, BTN8). */
+@media (max-width: 22.4375rem) {
+  .intro { padding-inline: 1rem; }
+  .signup-card { padding-inline: 1rem; }
+  .claim { padding-inline: 1rem; }
+}
+
 @media (min-width: 48rem) {
   body { background-image: url("/images/bg-intro-desktop.png"); }
   .intro { width: min(100%, 37.75rem); padding: 5.5rem 2rem 4rem; }
