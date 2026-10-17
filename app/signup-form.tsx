@@ -2,25 +2,28 @@
 
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useRef, useState } from "react";
-import { z } from "zod";
+import * as z from "zod/mini";
 
 /** NIST SP 800-63B-4 asks for at least 15 characters when a password is the only factor. */
 const PASSWORD_MIN = 15;
 
+// Zod Mini: the same validation as Zod's chained API, a fraction of the client JavaScript.
 const signupSchema = z
   .object({
-    firstName: z.string().trim().min(1, "First Name cannot be empty"),
-    lastName: z.string().trim().min(1, "Last Name cannot be empty"),
-    email: z.string().trim().min(1, "Email Address cannot be empty").pipe(z.email("Looks like this is not an email")),
-    password: z.string().min(1, { error: "Password cannot be empty", abort: true }).min(PASSWORD_MIN, "Password is too short"),
-    confirmPassword: z.string().min(1, "Confirm Password cannot be empty"),
+    firstName: z.string().check(z.trim(), z.minLength(1, "First Name cannot be empty")),
+    lastName: z.string().check(z.trim(), z.minLength(1, "Last Name cannot be empty")),
+    email: z.pipe(z.string().check(z.trim(), z.minLength(1, "Email Address cannot be empty")), z.email("Looks like this is not an email")),
+    password: z.string().check(z.minLength(1, { error: "Password cannot be empty", abort: true }), z.minLength(PASSWORD_MIN, "Password is too short")),
+    confirmPassword: z.string().check(z.minLength(1, "Confirm Password cannot be empty")),
   })
-  .refine(value => value.password === value.confirmPassword, {
-    error: "Passwords do not match",
-    path: ["confirmPassword"],
-    // Report a mismatch even while another field is still invalid, unless the confirmation is simply empty.
-    when: payload => !payload.issues.some(issue => issue.path?.[0] === "confirmPassword"),
-  });
+  .check(
+    z.refine(value => value.password === value.confirmPassword, {
+      error: "Passwords do not match",
+      path: ["confirmPassword"],
+      // Report a mismatch even while another field is still invalid, unless the confirmation is simply empty.
+      when: payload => !payload.issues.some(issue => issue.path?.[0] === "confirmPassword"),
+    }),
+  );
 
 type SignupValues = z.input<typeof signupSchema>;
 type FieldName = keyof SignupValues;
