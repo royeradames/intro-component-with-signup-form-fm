@@ -3,6 +3,10 @@
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useRef, useState } from "react";
 import * as z from "zod/mini";
+import en from "zod/v4/locales/en.js";
+
+// Zod Mini loads no messages by default; English keeps built-in messages identical to classic Zod.
+z.config(en());
 
 /** NIST SP 800-63B-4 asks for at least 15 characters when a password is the only factor. */
 const PASSWORD_MIN = 15;
