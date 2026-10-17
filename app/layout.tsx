@@ -3,10 +3,7 @@ import { Poppins } from "next/font/google";
 import { pageDescription, pageTitle, siteName, siteUrl } from "./site";
 import "./globals.css";
 
-// Fonts aren't preloaded: text paints at once in next/font's size-matched fallback (display: swap), so the
-// font files needn't compete with the first paint.
 const poppins = Poppins({
-  preload: false,
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   style: ["normal", "italic"],
