@@ -2,6 +2,7 @@
   "name": "intro-component-with-signup-form",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "bun@1.4.4",
   "engines": {
     "node": ">=22.13.0"
   },
